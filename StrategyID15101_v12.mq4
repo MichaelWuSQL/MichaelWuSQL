@@ -19,10 +19,6 @@ Entry point: RSI higher or lower than threshold (15) in M5 (or M60)
 //+------------------------------------------------------------------+
 
 
-// include
-#include <StandardFunctionVer1.0.mqh>
-
-
 // Get Version Number
 string Version = "20200726" ;
 
