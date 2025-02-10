@@ -1,0 +1,233 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Data.Sql;
+using System.Data.SqlClient;
+using System.Data;
+using System.IO;
+
+namespace AxiInfoFileIntegration
+{
+    public class FileIntegration
+    {
+        public void ExecuteSQL(string xConn, string xSQLQuery, string xLogFilePath = @"C:\Log\FileIntegration.txt")
+        {
+            try
+            {
+                using (SqlConnection sqlCon = new SqlConnection(xConn))
+                {
+                    sqlCon.Open();
+
+                    SqlCommand cmd = new SqlCommand(xSQLQuery, sqlCon);
+
+                    // Setting command timeout to 1000 second  
+                    cmd.CommandTimeout = 1000;
+
+                    int result = cmd.ExecuteNonQuery();
+
+                    sqlCon.Close();
+                }
+            }
+            catch (Exception Error)
+            {
+                WriteLog(DateTime.UtcNow + Error.Message,xLogFilePath);
+            }
+        }
+       
+        public DataTable ConvertCSVtoDataTable(string strFilePath)
+        {
+            DataTable dt = new DataTable();
+
+            using (StreamReader sr = new StreamReader(strFilePath))
+            {
+                string[] headers = sr.ReadLine().Split(',');
+
+                foreach (string header in headers)
+                {
+                    dt.Columns.Add(header);
+                }
+                while (!sr.EndOfStream)
+                {
+                    string[] rows = sr.ReadLine().Split(',');
+                    DataRow dr = dt.NewRow();
+                    for (int i = 0; i < headers.Length; i++)
+                    {
+                        dr[i] = rows[i];
+                    }
+                    dt.Rows.Add(dr);
+                }
+            }
+
+            return dt;
+        }
+
+        public void InsertIntoSQL(string xConnection, string xFileFullPath, string xTargetTable, string xLogFilePath = @"C:\Log\FileIntegration.txt")
+        {
+            SqlConnection con = new SqlConnection(xConnection);
+
+            SqlBulkCopy objbulk = new SqlBulkCopy(con);
+
+            //assign Destination table name  
+            objbulk.DestinationTableName = xTargetTable;
+
+            try
+            {
+                DataTable dt = ConvertCSVtoDataTable(xFileFullPath);
+                
+                con.Open();
+
+                foreach (var column in dt.Columns)
+                {
+                    objbulk.ColumnMappings.Add(column.ToString(), column.ToString());
+                }
+
+                objbulk.WriteToServer(dt);
+
+                con.Close();
+            }
+            catch (Exception Error)
+            {
+                WriteLog(DateTime.UtcNow + Error.Message, xLogFilePath);
+            }
+        }
+
+        public void InsertIntoSQL_Column(string xConnection, string xFileFullPath, string xTargetTable, 
+            string Column1 ="", string Column2 = "", string Column3 = "", string Column4 = "", string Column5 = "", string Column6 = "",
+            string xLogFilePath = @"C:\Log\FileIntegration.txt")
+        {
+            SqlConnection con = new SqlConnection(xConnection);
+
+            SqlBulkCopy objbulk = new SqlBulkCopy(con);
+
+            //assign Destination table name  
+            objbulk.DestinationTableName = xTargetTable;
+
+            try
+            {
+                DataTable dt = ConvertCSVtoDataTable(xFileFullPath);
+
+                con.Open();
+
+                foreach (var column in dt.Columns)
+                {
+                    if( (Column1 != "" && column.ToString() == Column1) ||
+                        (Column2 != "" && column.ToString() == Column2) ||
+                        (Column3 != "" && column.ToString() == Column3) ||
+                        (Column4 != "" && column.ToString() == Column4) ||
+                        (Column5 != "" && column.ToString() == Column5) ||
+                        (Column6 != "" && column.ToString() == Column6) 
+                            )
+                    objbulk.ColumnMappings.Add(column.ToString(), column.ToString());
+                }
+
+                objbulk.WriteToServer(dt);
+
+                con.Close();
+            }
+            catch (Exception Error)
+            {
+                WriteLog(DateTime.UtcNow + Error.Message, xLogFilePath);
+            }
+        }
+
+        public void MoveFileToProcessedFolder_Force(string xOriginalFilePath, string xNewFilePath, string xLogFilePath = @"C:\Log\FileIntegration.txt")
+        {
+            try
+            {
+                if (File.Exists(xNewFilePath))
+                {
+                    File.Delete(xNewFilePath);
+                }
+
+                File.Move(xOriginalFilePath, xNewFilePath);
+            }
+            catch (IOException iox)
+            {
+                WriteLog(DateTime.UtcNow + iox.Message, xLogFilePath);
+            }
+        }
+
+        public void WriteLog(string xMessage, string xLogFilePath)
+        {
+            // Append text to an existing file named "WriteLines.txt".
+            using (StreamWriter outputFile = new StreamWriter(xLogFilePath, true))
+            {
+                outputFile.WriteLine(xMessage);
+            }
+        }
+
+
+        public string SelectSingleValueFromSQL(string xConnection, string xQuery, string xLogFilePath = @"C:\Log\FileIntegration.txt")
+        {
+            string ReturnR_F1="";
+
+            using (SqlConnection sqlCon1 = new SqlConnection(xConnection))
+            {
+                sqlCon1.Open();
+
+                using (SqlCommand command1 = new SqlCommand(xQuery, sqlCon1))
+                {
+                    using (SqlDataReader reader = command1.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            ReturnR_F1 = reader[0].ToString();
+                        }
+                    }
+                }
+
+                sqlCon1.Close();
+            }
+
+            return ReturnR_F1;
+        }
+
+        public int CreateCSVFromSQLReturnRowCount(string xConnection, string xQuery, string xFullFilePath )
+        {
+            int Return_RC = 0;
+
+            List<string> lines = new List<string>();
+
+            using (SqlConnection sqlCon1 = new SqlConnection(xConnection))
+            {
+                sqlCon1.Open();
+
+                using (SqlCommand command1 = new SqlCommand(xQuery, sqlCon1))
+                {
+                    using (IDataReader reader = command1.ExecuteReader())
+                    {
+                        string headerline = "";
+
+                        string[] columns = new string[reader.FieldCount];
+
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            columns[i] = reader.GetName(i);
+                        }
+
+                        headerline = string.Join(",", columns);
+
+                        lines.Add(headerline);
+
+                        while (reader.Read())
+                        {
+                            object[] values = new object[reader.FieldCount];
+                            reader.GetValues(values);
+                            lines.Add(string.Join(",", values));
+                            Return_RC++;
+                        }
+
+                        File.WriteAllLines(xFullFilePath, lines);
+                    }
+                }
+
+                sqlCon1.Close();
+            }
+
+            return Return_RC;
+        }
+
+    }
+}
