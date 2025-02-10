@@ -1,14 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Data.Sql;
-using System.Data.SqlClient;
-using System.Data;
-using System.IO;
 
-namespace AxiInfoFileIntegration
+namespace testfileintegration
 {
     public class FileIntegration
     {
@@ -32,10 +30,10 @@ namespace AxiInfoFileIntegration
             }
             catch (Exception Error)
             {
-                WriteLog(DateTime.UtcNow + Error.Message,xLogFilePath);
+                WriteLog(DateTime.UtcNow + Error.Message, xLogFilePath);
             }
         }
-       
+
         public DataTable ConvertCSVtoDataTable(string strFilePath)
         {
             DataTable dt = new DataTable();
@@ -63,9 +61,34 @@ namespace AxiInfoFileIntegration
             return dt;
         }
 
-        public void InsertIntoSQL(string xConnection, string xFileFullPath, string xTargetTable, string xLogFilePath = @"C:\Log\FileIntegration.txt")
+        public void InsertIntoSQL(string xConnection, string xFileFullPath, string xTargetTable,bool IsCreateNewTable = true, string xLogFilePath = @"C:\Log\FileIntegration.txt")
         {
             SqlConnection con = new SqlConnection(xConnection);
+
+            if (IsCreateNewTable == true)
+            {
+                //drop table if exist
+                string Q_droptableifexisit = "IF OBJECT_ID (N'"+ xTargetTable + "', N'U') IS NOT NULL drop table "+ xTargetTable;
+
+                ExecuteSQL(xConnection,Q_droptableifexisit,xLogFilePath);
+
+                // create new table
+                string Q_Createnewtable = "Create table "+ xTargetTable + " (";
+
+                using (StreamReader sr = new StreamReader(xFileFullPath))
+                {
+                    string[] headers = sr.ReadLine().Split(',');
+
+                    foreach (string header in headers)
+                    {
+                        Q_Createnewtable = Q_Createnewtable + header + " varchar(255) ,";
+                    }
+                }
+
+                Q_Createnewtable = Q_Createnewtable.Substring(0, Q_Createnewtable.Length - 1) + ")";
+
+                ExecuteSQL(xConnection, Q_Createnewtable, xLogFilePath);
+            }
 
             SqlBulkCopy objbulk = new SqlBulkCopy(con);
 
@@ -75,7 +98,7 @@ namespace AxiInfoFileIntegration
             try
             {
                 DataTable dt = ConvertCSVtoDataTable(xFileFullPath);
-                
+
                 con.Open();
 
                 foreach (var column in dt.Columns)
@@ -93,8 +116,8 @@ namespace AxiInfoFileIntegration
             }
         }
 
-        public void InsertIntoSQL_Column(string xConnection, string xFileFullPath, string xTargetTable, 
-            string Column1 ="", string Column2 = "", string Column3 = "", string Column4 = "", string Column5 = "", string Column6 = "",
+        public void InsertIntoSQL_Column(string xConnection, string xFileFullPath, string xTargetTable,
+            string Column1 = "", string Column2 = "", string Column3 = "", string Column4 = "", string Column5 = "", string Column6 = "",
             string xLogFilePath = @"C:\Log\FileIntegration.txt")
         {
             SqlConnection con = new SqlConnection(xConnection);
@@ -112,14 +135,14 @@ namespace AxiInfoFileIntegration
 
                 foreach (var column in dt.Columns)
                 {
-                    if( (Column1 != "" && column.ToString() == Column1) ||
+                    if ((Column1 != "" && column.ToString() == Column1) ||
                         (Column2 != "" && column.ToString() == Column2) ||
                         (Column3 != "" && column.ToString() == Column3) ||
                         (Column4 != "" && column.ToString() == Column4) ||
                         (Column5 != "" && column.ToString() == Column5) ||
-                        (Column6 != "" && column.ToString() == Column6) 
+                        (Column6 != "" && column.ToString() == Column6)
                             )
-                    objbulk.ColumnMappings.Add(column.ToString(), column.ToString());
+                        objbulk.ColumnMappings.Add(column.ToString(), column.ToString());
                 }
 
                 objbulk.WriteToServer(dt);
@@ -161,7 +184,7 @@ namespace AxiInfoFileIntegration
 
         public string SelectSingleValueFromSQL(string xConnection, string xQuery, string xLogFilePath = @"C:\Log\FileIntegration.txt")
         {
-            string ReturnR_F1="";
+            string ReturnR_F1 = "";
 
             using (SqlConnection sqlCon1 = new SqlConnection(xConnection))
             {
@@ -184,7 +207,7 @@ namespace AxiInfoFileIntegration
             return ReturnR_F1;
         }
 
-        public int CreateCSVFromSQLReturnRowCount(string xConnection, string xQuery, string xFullFilePath )
+        public int CreateCSVFromSQLReturnRowCount(string xConnection, string xQuery, string xFullFilePath)
         {
             int Return_RC = 0;
 
